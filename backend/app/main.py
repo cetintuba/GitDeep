@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.core.config import settings
 from app.api.endpoints import router as api_router
+from app.api.auth import router as auth_router
 from app.db.database import engine, Base
 
 # Create tables
@@ -23,6 +24,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+
+@app.on_event("startup")
+async def startup():
+    print("Starting up GitDeep backend...")
 
 @app.get("/")
 def read_root():

@@ -6,6 +6,17 @@ services:
     ports:
       - "6379:6379"
 
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: gitdeep
+      POSTGRES_PASSWORD: gitdeep_password
+      POSTGRES_DB: gitdeep
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     build:
       context: ./backend
@@ -16,10 +27,12 @@ services:
       - ./backend/.env
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://gitdeep:gitdeep_password@db/gitdeep
     volumes:
       - ./backend/reports:/app/reports
     depends_on:
       - redis
+      - db
 
   celery_worker:
     build:
@@ -30,10 +43,12 @@ services:
       - ./backend/.env
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://gitdeep:gitdeep_password@db/gitdeep
     volumes:
       - ./backend/reports:/app/reports
     depends_on:
       - redis
+      - db
       - backend
 
   frontend:
@@ -44,3 +59,6 @@ services:
       - "8080:80"
     depends_on:
       - backend
+
+volumes:
+  postgres_data:

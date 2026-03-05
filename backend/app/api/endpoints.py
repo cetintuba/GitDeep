@@ -4,18 +4,21 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.models.schemas import RepositorySubmission, RepoAnalysisStatus
 from app.services.analysis_orchestrator import AnalysisOrchestrator
-<<<<<<< HEAD
 from app.db.database import get_db
-from app.db.models import RepoAnalysisRecord
+from app.db.models import RepoAnalysisRecord, User
+from app.core.security import get_current_user
 from github import RateLimitExceededException
-=======
->>>>>>> bde3534b1529b1c615e6852836f6d32d6cef0f99
+from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter()
 orchestrator = AnalysisOrchestrator()
 
 @router.post("/analyze", response_model=RepoAnalysisStatus)
-def analyze_repository(submission: RepositorySubmission, db: Session = Depends(get_db)):
+def analyze_repository(
+    submission: RepositorySubmission, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     url = submission.url
     # Extract owner and repo from URL
     # e.g., https://github.com/betaforevers/GitDeep -> betaforevers/GitDeep
@@ -39,26 +42,21 @@ def analyze_repository(submission: RepositorySubmission, db: Session = Depends(g
     if recent_record:
         # Return the cached analysis
         details = json.loads(recent_record.metrics_json)
-<<<<<<< HEAD
         return {"status": "success", "message": "Loaded from cache", "task_id": "cached", "result": RepoAnalysisStatus(
-=======
-        return RepoAnalysisStatus(
->>>>>>> bde3534b1529b1c615e6852836f6d32d6cef0f99
             status="success",
             message=recent_record.summary_text,
             details=details,
             chart_data={
-                "activity_trend": {}, # Could be stored if needed, but not critical for cache
+                "activity_trend": {}, 
                 "intent_breakdown": {}
             },
             pdf_url=recent_record.pdf_url,
             health_score=recent_record.health_score
-<<<<<<< HEAD
         )}
     
     try:
         from app.celery_worker import analyze_repo_task
-        task = analyze_repo_task.delay(url, owner, repo)
+        task = analyze_repo_task.delay(url, owner, repo, current_user.id)
         return {"status": "processing", "message": "Analysis started in background", "task_id": task.id, "result": None}
     except RateLimitExceededException:
         raise HTTPException(status_code=429, detail="GitHub API Rate Limit exceeded! Unauthenticated requests are limited to 60 per hour.")
@@ -81,22 +79,15 @@ def get_analysis_status(task_id: str):
     else:
         return {"status": task_result.state.lower(), "message": "Unknown state", "result": None}
 
-=======
-        )
-    
-    try:
-        result = orchestrator.analyze_repository(url, owner, repo, db)
-        return RepoAnalysisStatus(**result)
-    except RateLimitExceededException:
-        raise HTTPException(status_code=429, detail="GitHub API Rate Limit exceeded! Unauthenticated requests are limited to 60 per hour. Please wait, or add a GITHUB_PAT to your .env file.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
->>>>>>> bde3534b1529b1c615e6852836f6d32d6cef0f99
-@router.get("/history")
-def get_analysis_history(db: Session = Depends(get_db)):
-    """Retrieve the 3 most recent historical analyses."""
-    records = db.query(RepoAnalysisRecord).order_by(RepoAnalysisRecord.created_at.desc()).limit(3).all()
+@router.get("/me/history")
+def get_user_analysis_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve the recent historical analyses for the logged in user."""
+    records = db.query(RepoAnalysisRecord).filter(
+        RepoAnalysisRecord.user_id == current_user.id
+    ).order_by(RepoAnalysisRecord.created_at.desc()).limit(10).all()
     history = []
     for r in records:
         history.append({
